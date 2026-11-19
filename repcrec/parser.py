@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
+from repcrec.placement import NUM_SITES, NUM_VARIABLES
+
 
 class Kind(Enum):
     BEGIN = "begin"
@@ -38,9 +40,6 @@ class Command:
 class ParseError(ValueError):
     pass
 
-
-NUM_VARIABLES = 20
-NUM_SITES = 10
 
 _LINE_RE = re.compile(r"^([A-Za-z]+)\s*\((.*)\)\s*;?$")
 _TID_RE = re.compile(r"^[Tt](\d+)$")

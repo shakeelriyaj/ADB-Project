@@ -63,8 +63,8 @@ Based on `proposal.pdf`. This plan assumes **Python 3**; nothing in the proposal
 
 1. `Transaction` fields: `tid`, `begin_time`, `status` (ACTIVE/WAITING/COMMITTED/ABORTED), `write_buffer {var: value}`, `sites_written {site: first_write_time}`, `read_set {var: (writer_tid, version_time)}`, `write_set`, `pending_op`, and `commit_time`.
 2. TM state:
-   - `site_history[k]`: list of `(fail_time, recover_time|None)` intervals.
-   - `helper: was_up_continuously(site, t1, t2)`.
+   - The 10 `DataManager`s. Each site keeps its own failure history, so use `dm.was_up_throughout(t1, t2)` and `dm.failed_between(t1, t2)`. This was done in Phase 3.
+   - A global commit log per variable for first-committer-wins. A site that was down may have missed commits, so no single site's versions are complete.
 3. Implement `begin`, `fail`, `recover`, `dump`, and `querystate`. `querystate` prints the transaction table, site status and history, the wait queue, graph edges, and the per-site values.
 
 ## Phase 5 — Reads (days 4–5)
