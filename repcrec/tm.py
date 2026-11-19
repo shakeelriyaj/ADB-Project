@@ -133,9 +133,23 @@ class TransactionManager:
         self._emit(output.abort(txn.tid, reason))
 
     def _write(self, cmd: Command) -> None:
-        if self._live_txn(cmd) is None:
+        """W(T, x, v): buffer the write and note which sites it will go to (§4.4).
+
+        The target sites are the ones holding x that are up *now*. At commit
+        the value goes to exactly these sites, never to a site that recovers
+        later (Test 3.5). If one of them fails before end(T), the Available
+        Copies rule aborts T. If no site holding x is up, T waits.
+        """
+        txn = self._live_txn(cmd)
+        if txn is None:
             return
-        self._warn("W not implemented yet (Phase 6)")
+        holders = placement.sites_for(cmd.var)
+        up = [s for s in holders if self.sites[s].is_up]
+        if not up:
+            self._block(txn, cmd, holders)
+            return
+        txn.record_write(cmd.var, cmd.value, up, self.time)
+        self._emit(output.write(txn.tid, cmd.var, cmd.value, up))
 
     def _end(self, cmd: Command) -> None:
         if self._live_txn(cmd) is None:
