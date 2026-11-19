@@ -1,0 +1,7 @@
+T3 writes x2: 22 to sites 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+T2 writes x3: 44 to site 4
+T3 reads x3: 30
+T2 commits
+T3 aborts: available copies (site 4 failed after T3 wrote to it)
+T1 reads x2: 20
+T1 commits

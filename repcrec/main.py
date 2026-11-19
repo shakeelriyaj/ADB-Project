@@ -15,7 +15,7 @@ from repcrec.tm import TransactionManager
 
 
 def run(lines: Iterable[str], out: TextIO, err: TextIO = sys.stderr) -> TransactionManager:
-    tm = TransactionManager(out)
+    tm = TransactionManager(out, err)
     tick = 0
     for lineno, line in enumerate(lines, start=1):
         tick += 1

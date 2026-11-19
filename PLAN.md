@@ -117,12 +117,26 @@ Tests (the classic cases): write skew (must abort), lost update (FCW), read-only
 
 ## Phase 9 — Output polish (day 9)
 
-Write a single `output.py` with all the message formats so they stay consistent:
-- `x4: 40`
-- `T1 commits` / `T1 aborts (reason)`
-- `W(T1,x4,5) -> sites 1,2,3...`
-- `T2 waits for site 4` / `T2 resumes`
-- `site 1 - x2: 20, x4: 40, ...` (dump)
+Write a single `output.py` with all the message formats so they stay consistent.
+
+### Output format (fixed; `tests/expected/*.txt` depend on it)
+
+| Event | Line |
+|---|---|
+| Read | `T2 reads x3: 30` |
+| Write | `T1 writes x2: 202 to sites 1, 2, 3, 4, 5, 6, 7, 8, 9, 10` (or `to site 2` when there is only one) |
+| Wait (read) | `T3 waits for site 2 to read x8` (or `sites 2, 5`) |
+| Wait (write) | `T1 waits for site 4 to write x3` |
+| Resumed op | no extra line; the retried op prints its normal line |
+| Commit | `T1 commits` |
+| Abort, Available Copies | `T2 aborts: available copies (site 2 failed after T2 wrote to it)`, naming the lowest such site |
+| Abort, first committer wins | `T1 aborts: first committer wins (T2 committed x1 after T1 began)`, naming the lowest var and the earliest such committer |
+| Abort, SSI | `T5 aborts: SSI (commit would close a cycle with two consecutive rw edges)` |
+| Abort, no valid snapshot (read) | `T3 aborts: no valid snapshot of x8 (no site up continuously from its last commit until T3 began)` |
+| Dump | 10 lines: `site k - x2: 20, x4: 40, ...` with ascending vars, including down sites |
+| fail / recover / begin | no output |
+
+At `end(T)` the checks run in this order: Available Copies, then first committer wins, then SSI. Only the first one that triggers is reported.
 
 ## Phase 10 — Testing (days 9–11)
 
@@ -181,4 +195,4 @@ Sources: `FinalProject_FAQs (1).pdf` and the SSI sample tests PDF. The FAQ is ti
 1. **Test 2's comment versus our cycle rule.** T2 has only `T2 -rw-> T1` edges, with no edge back to T2, so under the cycle rule T2 **commits**. The comment says SSI causes an abort. The dump is the same either way. Ask which outcome the graders expect for T2.
 2. **Does a site failing after T *read* from it abort T?** The FAQ says yes, but that is the locking variant. Proposal §4.3.5 says no under SSI, and no SSI test exercises it. Current choice: no.
 3. **Write when every site holding the variable is down:** the tests and FAQ don't cover it. Current choice: wait.
-4. **Output format:** the tests only describe dumps in prose. The FAQ says showing which transaction did each read is "helpful", for example `T2 reads x3: 30`. Choose one exact format and use it everywhere.
+4. ~~Output format~~: decided; see "Output format" in Phase 9. Reads name the transaction, per the FAQ.

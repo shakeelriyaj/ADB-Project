@@ -7,7 +7,7 @@ from repcrec.parser import Kind
 class RecordingTM:
     """Stands in for TransactionManager to observe dispatch and ticks."""
 
-    def __init__(self, out):
+    def __init__(self, out, err=None):
         self.calls = []
 
     def process(self, cmd, tick):

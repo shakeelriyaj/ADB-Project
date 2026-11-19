@@ -1,0 +1,6 @@
+T1 reads x3: 30
+T2 writes x8: 88 to sites 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+T2 reads x3: 30
+T1 writes x4: 91 to sites 1, 3, 4, 5, 6, 7, 8, 9, 10
+T2 aborts: available copies (site 2 failed after T2 wrote to it)
+T1 commits

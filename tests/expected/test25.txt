@@ -1,0 +1,10 @@
+T1 reads x1: 10
+T2 writes x8: 88 to sites 1, 2, 5, 6, 7, 8, 9, 10
+T1 commits
+T2 reads x3: 30
+T2 commits
+T4 writes x8: 99 to sites 3, 4
+T4 commits
+T3 waits for site 2 to read x8
+T3 reads x8: 88
+T3 commits

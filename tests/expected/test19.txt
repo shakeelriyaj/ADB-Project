@@ -1,0 +1,15 @@
+T3 writes x3: 300 to site 4
+T4 reads x4: 40
+T5 reads x5: 50
+T1 reads x6: 60
+T2 reads x2: 20
+T1 writes x2: 10 to sites 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+T2 writes x3: 20 to site 4
+T3 writes x4: 30 to sites 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+T5 writes x1: 50 to site 2
+T5 commits
+T4 writes x5: 40 to site 6
+T4 commits
+T3 aborts: available copies (site 4 failed after T3 wrote to it)
+T2 commits
+T1 commits

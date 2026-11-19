@@ -1,0 +1,6 @@
+T3 writes x2: 10 to sites 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+T1 writes x2: 20 to sites 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+T2 writes x2: 30 to sites 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+T1 commits
+T3 aborts: first committer wins (T1 committed x2 after T3 began)
+T2 aborts: first committer wins (T1 committed x2 after T2 began)
