@@ -6,12 +6,7 @@ import pytest
 from repcrec.main import run
 from repcrec.parser import parse_line
 from repcrec.transaction import Status, Transaction
-
-
-def run_script(script: str):
-    out, err = io.StringIO(), io.StringIO()
-    tm = run(io.StringIO(script), out, err)
-    return tm, out.getvalue(), err.getvalue()
+from tests.helpers import run_script
 
 
 # ---------------------------------------------------------------- Transaction

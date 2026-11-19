@@ -52,3 +52,12 @@ class Transaction:
 
     def record_read(self, var: int, writer: str, commit_time: int) -> None:
         self.read_set.setdefault(var, (writer, commit_time))
+
+    def block(self, cmd: Command) -> None:
+        self.status = Status.WAITING
+        self.pending = cmd
+
+    def abort(self, reason: str) -> None:
+        self.status = Status.ABORTED
+        self.abort_reason = reason
+        self.pending = None

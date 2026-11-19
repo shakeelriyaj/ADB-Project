@@ -12,8 +12,8 @@ Output conventions:
 import sys
 from typing import Dict, List, Optional, TextIO, Tuple
 
-from repcrec import placement
-from repcrec.dm import DataManager
+from repcrec import output, placement
+from repcrec.dm import DataManager, Version
 from repcrec.parser import Command, Kind
 from repcrec.transaction import Status, Transaction
 
@@ -82,9 +82,55 @@ class TransactionManager:
         self.transactions[cmd.tid] = Transaction(cmd.tid, self.time)
 
     def _read(self, cmd: Command) -> None:
-        if self._live_txn(cmd) is None:
+        """R(T, x): snapshot read as of T's begin time (proposal §4.3)."""
+        txn = self._live_txn(cmd)
+        if txn is None:
             return
-        self._warn("R not implemented yet (Phase 5)")
+        var = cmd.var
+
+        # 1. Read-your-own-writes.
+        if var in txn.write_buffer:
+            self._emit(output.read(txn.tid, var, txn.write_buffer[var]))
+            return
+
+        # 2/3. Read T's snapshot from any valid up site, else wait or abort.
+        ver, down = self._snapshot(var, txn.begin_time)
+        if ver is not None:
+            txn.record_read(var, ver.writer, ver.commit_time)
+            self._emit(output.read(txn.tid, var, ver.value))
+        elif down:
+            self._block(txn, cmd, down)
+        else:
+            self._abort(txn, output.reason_no_snapshot(txn.tid, var))
+
+    def _snapshot(self, var: int, begin_time: int) -> Tuple[Optional[Version], List[int]]:
+        """T's snapshot of x`var` from an up site, plus the down sites that hold it.
+
+        Any valid up site gives the same version (see DataManager.snapshot_version).
+        """
+        down = []
+        for s in placement.sites_for(var):
+            dm = self.sites[s]
+            ver = dm.snapshot_version(var, begin_time)
+            if ver is None:
+                continue
+            if dm.is_up:
+                return ver, []
+            down.append(s)
+        return None, down
+
+    def _block(self, txn: Transaction, cmd: Command, sites: List[int]) -> None:
+        """Park `cmd` until one of `sites` recovers (retried in Phase 8)."""
+        txn.block(cmd)
+        self.wait_queue.append(txn.tid)
+        op = "read" if cmd.kind is Kind.READ else "write"
+        self._emit(output.wait(txn.tid, sites, op, cmd.var))
+
+    def _abort(self, txn: Transaction, reason: str) -> None:
+        txn.abort(reason)
+        if txn.tid in self.wait_queue:
+            self.wait_queue.remove(txn.tid)
+        self._emit(output.abort(txn.tid, reason))
 
     def _write(self, cmd: Command) -> None:
         if self._live_txn(cmd) is None:

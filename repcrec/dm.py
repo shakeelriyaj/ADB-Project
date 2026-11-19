@@ -66,6 +66,24 @@ class DataManager:
                 return ver
         raise AssertionError(f"no version of x{var} at site {self.site_id} as of {t}")
 
+    def snapshot_version(self, var: int, t: int) -> Optional[Version]:
+        """The version a transaction that began at `t` may read here, or None.
+
+        Unreplicated: always valid. It is the only copy, so nothing can have
+        been committed to it while the site was down.
+
+        Replicated: valid only if the site was up continuously from the commit
+        of its latest version at or before t until t. A failure in that window
+        means the site may have missed later commits (§4.3.3). This also
+        covers §4.3.4, since a site that recovered before t, with no new
+        commit since, fails the check. A site that failed *after* t still
+        qualifies once it is back up (Test 25).
+        """
+        ver = self.version_as_of(var, t)
+        if placement.is_replicated(var) and not self.was_up_throughout(ver.commit_time, t):
+            return None
+        return ver
+
     def apply_commit(self, var: int, value: int, commit_time: int, writer: str) -> None:
         if not self.is_up:
             raise SiteDownError(f"site {self.site_id} is down; cannot apply write to x{var}")
