@@ -57,6 +57,10 @@ class Transaction:
         self.status = Status.WAITING
         self.pending = cmd
 
+    def unblock(self) -> None:
+        self.status = Status.ACTIVE
+        self.pending = None
+
     def abort(self, reason: str) -> None:
         self.status = Status.ABORTED
         self.abort_reason = reason

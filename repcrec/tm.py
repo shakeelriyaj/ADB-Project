@@ -2,7 +2,7 @@
 
 Owns the logical clock, the transaction table, the ten Data Managers, the
 wait queue, and the global per-variable commit log. Reads, writes and commit
-validation are filled in by Phases 5-7; waiting/retry by Phase 8.
+validation and waiting/retry are implemented below.
 
 Output conventions:
   * Required output (reads, writes, commits/aborts, waits, dumps) goes to `out`.
@@ -122,7 +122,7 @@ class TransactionManager:
         return None, down
 
     def _block(self, txn: Transaction, cmd: Command, sites: List[int]) -> None:
-        """Park `cmd` until one of `sites` recovers (retried in Phase 8)."""
+        """Park `cmd` until one of `sites` recovers (see _retry_waiting)."""
         txn.block(cmd)
         self.wait_queue.append(txn.tid)
         op = "read" if cmd.kind is Kind.READ else "write"
@@ -235,7 +235,26 @@ class TransactionManager:
         self._retry_waiting()
 
     def _retry_waiting(self) -> None:
-        """Re-attempt blocked operations in FIFO order (Phase 8)."""
+        """After a recovery, resume blocked operations that can now run (§4.6).
+
+        Queue order is FIFO. An op that still can't run stays queued without
+        printing its wait line again. A resumed read still uses T's original
+        snapshot (begin_time), and a resumed write targets the sites up now.
+        """
+        for tid in list(self.wait_queue):
+            txn = self.transactions[tid]
+            cmd = txn.pending
+            if not self._can_proceed(txn, cmd):
+                continue
+            self.wait_queue.remove(tid)
+            txn.unblock()
+            {Kind.READ: self._read, Kind.WRITE: self._write}[cmd.kind](cmd)
+
+    def _can_proceed(self, txn: Transaction, cmd: Command) -> bool:
+        if cmd.kind is Kind.READ:
+            ver, _ = self._snapshot(cmd.var, txn.begin_time)
+            return ver is not None
+        return any(self.sites[s].is_up for s in placement.sites_for(cmd.var))
 
     def _dump(self, cmd: Command) -> None:
         for s in placement.ALL_SITES:
