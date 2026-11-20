@@ -14,6 +14,7 @@ from typing import Dict, List, Optional, TextIO, Tuple
 
 from repcrec import output, placement
 from repcrec.dm import DataManager, Version
+from repcrec.graph import RW, WR, WW, Edge, SerializationGraph
 from repcrec.parser import Command, Kind
 from repcrec.transaction import Status, Transaction
 
@@ -30,6 +31,7 @@ class TransactionManager:
         # sites. Used for first-committer-wins: a site that was down may have
         # missed commits, so no single site's versions are complete.
         self.commit_log: Dict[int, List[Tuple[int, str]]] = {v: [] for v in placement.ALL_VARIABLES}
+        self.graph = SerializationGraph()
 
     # ------------------------------------------------------------ plumbing
 
@@ -152,9 +154,76 @@ class TransactionManager:
         self._emit(output.write(txn.tid, cmd.var, cmd.value, up))
 
     def _end(self, cmd: Command) -> None:
-        if self._live_txn(cmd) is None:
+        """end(T): validate, then commit or abort (proposal §4.5).
+
+        Checks run in a fixed order and only the first failure is reported:
+        Available Copies, then first committer wins, then SSI.
+        """
+        txn = self._live_txn(cmd)
+        if txn is None:
             return
-        self._warn("end not implemented yet (Phase 7)")
+        reason = (self._available_copies_violation(txn)
+                  or self._first_committer_wins_violation(txn))
+        if reason is None:
+            edges = self._edges_with_committed(txn)
+            if self.graph.has_dangerous_cycle(txn.tid, edges):
+                reason = output.reason_ssi()
+        if reason is not None:
+            self._abort(txn, reason)
+            return
+        self._commit(txn, edges)
+
+    def _available_copies_violation(self, txn: Transaction) -> Optional[str]:
+        """A site T wrote to failed after T's first write there (§4.5.1)."""
+        for site in sorted(txn.first_write_at_site):
+            if self.sites[site].failed_between(txn.first_write_at_site[site], self.time):
+                return output.reason_available_copies(txn.tid, site)
+        return None
+
+    def _first_committer_wins_violation(self, txn: Transaction) -> Optional[str]:
+        """Another transaction committed a var T wrote after T began (§4.5.2)."""
+        for var in sorted(txn.write_set):
+            later = [(t, w) for t, w in self.commit_log[var] if t > txn.begin_time]
+            if later:
+                return output.reason_first_committer_wins(txn.tid, min(later)[1], var)
+        return None
+
+    def _edges_with_committed(self, txn: Transaction) -> List[Edge]:
+        """Serialization-graph edges between T and every committed transaction.
+
+        Edges among committed transactions were added when the later of the
+        pair committed, so only edges touching T are new.
+        """
+        edges: List[Edge] = []
+        for c in self.transactions.values():
+            if c.status is not Status.COMMITTED:
+                continue
+            for var in txn.write_set & c.write_set:
+                edges.append((c.tid, txn.tid, WW))       # c's version precedes T's
+            for var, (writer, ver_time) in txn.read_set.items():
+                if writer == c.tid:
+                    edges.append((c.tid, txn.tid, WR))   # T read c's version
+                elif var in c.write_set and c.commit_time > ver_time:
+                    edges.append((txn.tid, c.tid, RW))   # c overwrote what T read
+            for var in c.read_set:
+                if var in txn.write_set:
+                    edges.append((c.tid, txn.tid, RW))   # T overwrites what c read
+        return edges
+
+    def _commit(self, txn: Transaction, edges: List[Edge]) -> None:
+        """Apply T's writes to the sites recorded at write time (Test 3.5).
+
+        The Available Copies check guarantees none of them failed since, so
+        they are all up.
+        """
+        for var, value in sorted(txn.write_buffer.items()):
+            for s in sorted(txn.write_sites[var]):
+                self.sites[s].apply_commit(var, value, self.time, txn.tid)
+            self.commit_log[var].append((self.time, txn.tid))
+        txn.status = Status.COMMITTED
+        txn.commit_time = self.time
+        self.graph.add_edges(edges)
+        self._emit(output.commit(txn.tid))
 
     def _fail(self, cmd: Command) -> None:
         # Transactions that wrote to this site are aborted lazily at end()
@@ -214,6 +283,8 @@ class TransactionManager:
             lines.append("  " + "; ".join(parts))
 
         lines.append(f"Wait queue: {self.wait_queue or '(empty)'}")
+        edges = ", ".join(f"{u} -{k}-> {v}" for u, v, k in self.graph.edges())
+        lines.append(f"Serialization graph: {edges or '(no edges)'}")
 
         lines.append("Data (* = replicated copy not readable since recovery):")
         for s, dm in self.sites.items():

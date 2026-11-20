@@ -18,7 +18,9 @@ INPUTS = sorted((HERE / "inputs").glob("*.txt"))
 # Scripts that can't pass yet because the features they need aren't built.
 # strict=True: a listed script that starts passing FAILS the run, so remove it
 # from this set as phases 5-8 land. Goal: empty set.
-NOT_YET_PASSING = {p.stem for p in INPUTS}
+NOT_YET_PASSING = {
+    "test25",  # needs retry of a blocked read on recover (Phase 8)
+}
 
 
 def _cases():
